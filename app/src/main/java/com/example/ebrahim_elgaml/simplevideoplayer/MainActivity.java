@@ -45,7 +45,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
     private PlayerThread mPlayer = null;
     ArrayList<ByteBuffer> byteBuffers = new ArrayList<ByteBuffer>();
     private MediaExtractor mx;
-    @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -158,14 +158,14 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         private MediaExtractor extractor;
         private MediaCodec decoder;
         private Surface surface;
-
         public PlayerThread(Surface surface) {
             this.surface = surface;
         }
 
-        @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR2)
+        @TargetApi(Build.VERSION_CODES.LOLLIPOP)
         @Override
         public void run() {
+            final long startMs = System.currentTimeMillis();
             extractor = new MediaExtractor();
             try {
                 extractor.setDataSource(newPath);
@@ -176,11 +176,65 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
 
             try {
                 MediaFormat format = extractor.getTrackFormat(0);
-                String mime = format.getString(MediaFormat.KEY_MIME);
+                //String mime = format.getString(MediaFormat.KEY_MIME);
 
                 extractor.selectTrack(0);
                 //decoder = MediaCodec.createDecoderByType(mime);
                 decoder = MediaCodec.createByCodecName("OMX.google.h264.decoder");
+                decoder.setCallback(new MediaCodec.Callback(){
+
+                    @Override
+                    public void onInputBufferAvailable(MediaCodec codec, int index) {
+                        ByteBuffer inputBuffer = codec.getInputBuffer(index);
+                        int sampleSize = extractor.readSampleData(inputBuffer, 0);
+                        if(sampleSize > 0){
+//                            Byte myByte = 0;
+//                            while(inputBuffer.hasRemaining()){
+//                                if(myByte >= 127){
+//                                    myByte = 0;
+//                                }else{
+//                                    myByte ++;
+//                                }
+//                                inputBuffer.put(myByte);
+//                            }
+                            codec.queueInputBuffer(index, 0, sampleSize, extractor.getSampleTime(), 0);
+                            extractor.advance();
+                        }else{
+                            codec.queueInputBuffer(index, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                        }
+                    }
+                    @Override
+                    public void onOutputBufferAvailable(MediaCodec codec, int index, BufferInfo info) {
+                        ByteBuffer outputBuffer = codec.getOutputBuffer(index);
+                        if(index > 0 ){
+                            while (info.presentationTimeUs / 1000 > System.currentTimeMillis() - startMs) {
+                                try {
+                                    sleep(10);
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                    break;
+                                }
+                            }
+                            codec.releaseOutputBuffer(index, true);
+                        }else{
+
+                        }
+                        if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                            Log.d("DecodeActivity", "OutputBuffer BUFFER_FLAG_END_OF_STREAM");
+                            return;
+                        }
+
+                    }
+                    @Override
+                    public void onError(MediaCodec codec, CodecException e) {
+
+                    }
+
+                    @Override
+                    public void onOutputFormatChanged(MediaCodec codec, MediaFormat format) {
+
+                    }
+                });
                 decoder.configure(format, surface, null, 0);
 
             } catch (IOException e) {
@@ -190,90 +244,12 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
                 Log.e("DecodeActivity", "Can't find video info!");
                 return;
             }
-
             decoder.start();
-
-            ByteBuffer[] inputBuffers = decoder.getInputBuffers();
-            ByteBuffer[] outputBuffers = decoder.getOutputBuffers();
-            BufferInfo info = new BufferInfo();
-            ArrayList<Integer> indices = new ArrayList<Integer>();
-            ArrayList<Integer> sampleSizes = new ArrayList<Integer>();
-            ArrayList<Long> sampleTimes = new ArrayList<Long>();
-            boolean isEOS = false;
-            long startMs = System.currentTimeMillis();
-
-            while (!Thread.interrupted()) {
-                if (!isEOS) {
-                    int inIndex = decoder.dequeueInputBuffer(10000);
-                    if (inIndex >= 0) {
-                        ByteBuffer buffer = inputBuffers[inIndex];
-                        int sampleSize = extractor.readSampleData(buffer, 0);
-                        if (sampleSize < 0) {
-                            // We shouldn't stop the playback at this point, just pass the EOS
-                            // flag to decoder, we will get it again from the
-                            // dequeueOutputBuffer
-                            Log.d("DecodeActivity", "InputBuffer BUFFER_FLAG_END_OF_STREAM");
-                            decoder.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-                            isEOS = true;
-                        } else {
-
-                            Byte myByte = 0;
-                            while(buffer.hasRemaining()){
-                                if(myByte >= 127){
-                                    myByte = 0;
-                                }else{
-                                    myByte ++;
-                                }
-                                buffer.put(myByte);
-                            }
-                            decoder.queueInputBuffer(inIndex, 0, sampleSize, extractor.getSampleTime(), 0);
-                            extractor.advance();
-                        }
-                    }
-                }
-
-                int outIndex = decoder.dequeueOutputBuffer(info, 10000);
-                switch (outIndex) {
-                    case MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED:
-                        Log.d("DecodeActivity", "INFO_OUTPUT_BUFFERS_CHANGED");
-                        outputBuffers = decoder.getOutputBuffers();
-                        break;
-                    case MediaCodec.INFO_OUTPUT_FORMAT_CHANGED:
-                        Log.d("DecodeActivity", "New format " + decoder.getOutputFormat());
-                        break;
-                    case MediaCodec.INFO_TRY_AGAIN_LATER:
-                        Log.d("DecodeActivity", "dequeueOutputBuffer timed out!");
-                        break;
-                    default:
-                        ByteBuffer buffer = outputBuffers[outIndex];
-                        Log.v("DecodeActivity", "We can't use this buffer but render it due to the API limit, " + buffer);
-
-                        // We use a very simple clock to keep the video FPS, or the video
-                        // playback will be too fast
-                        while (info.presentationTimeUs / 1000 > System.currentTimeMillis() - startMs) {
-                            try {
-                                sleep(10);
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
-                                break;
-                            }
-                        }
-                        decoder.releaseOutputBuffer(outIndex, true);
-                        break;
-                }
-
-                // All decoded frames have been rendered, we can stop playing now
-                if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                    Log.d("DecodeActivity", "OutputBuffer BUFFER_FLAG_END_OF_STREAM");
-                    break;
-                }
-            }
-
             decoder.stop();
             decoder.release();
             extractor.release();
         }
 
 
-        }
     }
+}
