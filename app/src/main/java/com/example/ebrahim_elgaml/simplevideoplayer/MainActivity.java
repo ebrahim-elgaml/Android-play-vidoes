@@ -3,6 +3,8 @@ package com.example.ebrahim_elgaml.simplevideoplayer;
 
 import android.annotation.TargetApi;
 import android.app.ProgressDialog;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.PixelFormat;
 import android.media.MediaCodec;
 import android.media.MediaCodec.*;
@@ -39,8 +41,11 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
     private MediaController mediaControlsNew;
     private VideoView videoViewNew;
     private ProgressDialog progressDialogNew;
-    private final String originalPath = "https://res.cloudinary.com/ebrahim-elgaml/video/upload/v1458121201/yeoqfrqmbkljvtxzte9n.mp4";
-    private final String newPath = "http://res.cloudinary.com/ebrahim-elgaml/video/upload/v1458121373/hbad26lqqiyepau4mfu8.mp4";
+    //private final String originalPath = "https://res.cloudinary.com/ebrahim-elgaml/video/upload/v1458121201/yeoqfrqmbkljvtxzte9n.mp4";
+    private final String originalPath = "/sdcard/testing/test.mp4";
+    //private final String newPath = "http://res.cloudinary.com/ebrahim-elgaml/video/upload/v1458121373/hbad26lqqiyepau4mfu8.mp4";
+//    private String newPath = "http://res.cloudinary.com/ebrahim-elgaml/video/upload/v1458828046/a2mwuu7vbvfdsbfhg7qg.mp4";
+    private String newPath = "/sdcard/testing/test.mp4";
     private SurfaceView surfaceView ;
     private PlayerThread mPlayer = null;
     ArrayList<ByteBuffer> byteBuffers = new ArrayList<ByteBuffer>();
@@ -56,7 +61,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         playVideoOriginal(originalPath);
         playVideoNew(newPath);
         Log.i("VideoInfo", "MyClass.getView() — get item number ");
-        getVideoData();
+       // getVideoData();
         Log.d("BUFFERSIZE", "" + byteBuffers.size());
         videoViewNew.getHolder().addCallback(this);
 
@@ -158,7 +163,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         private MediaExtractor extractor;
         private MediaCodec decoder;
         private Surface surface;
-
+        int c = 0 ;
         public PlayerThread(Surface surface) {
             this.surface = surface;
         }
@@ -182,7 +187,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
                 //decoder = MediaCodec.createDecoderByType(mime);
                 decoder = MediaCodec.createByCodecName("OMX.google.h264.decoder");
                 decoder.configure(format, surface, null, 0);
-
+               // decoder.createInputSurface();
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -196,9 +201,6 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
             ByteBuffer[] inputBuffers = decoder.getInputBuffers();
             ByteBuffer[] outputBuffers = decoder.getOutputBuffers();
             BufferInfo info = new BufferInfo();
-            ArrayList<Integer> indices = new ArrayList<Integer>();
-            ArrayList<Integer> sampleSizes = new ArrayList<Integer>();
-            ArrayList<Long> sampleTimes = new ArrayList<Long>();
             boolean isEOS = false;
             long startMs = System.currentTimeMillis();
 
@@ -206,27 +208,91 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
                 if (!isEOS) {
                     int inIndex = decoder.dequeueInputBuffer(10000);
                     if (inIndex >= 0) {
-                        ByteBuffer buffer = inputBuffers[inIndex];
-                        int sampleSize = extractor.readSampleData(buffer, 0);
+                        ByteBuffer m = ByteBuffer.allocate((int) (320 * 180 * 1.5));
+                        int sampleSize = extractor.readSampleData(m, 0);
+                        byte myByte = -122;
+                        int k = 0;
+                        if(sampleSize> 0 ) {
+                            byte[] g = new byte[sampleSize];
+                            while (k < sampleSize) {
+                                g[k] = m.get(k);
+                                k++;
+                            }
+//                        //m.rewind();
+//                            if (c % 6 == 0) {
+//                                int j = 0;
+//                                while (j < sampleSize) {
+//                                    m.put(j, myByte);
+//                                    j++;
+//                                }
+//                            }
+                            c++;
+                            if(c%2 == 0) {
+                                int color = 0 ;
+                                for (int a = 0; a < g.length/4; a++) {
+                                    //g[a] = (byte) (g[a]/4);
+                                    g[a] = (byte) ((color++) & 0xFF);
+                                }
+                            }
+//                            for (int a = 0; a < g.length/8; a++) {
+//                                g[a] = (byte) (g[a]/4);
+//                            }
+//                        while(m.hasRemaining()) {
+//                                if (myByte >= 127) {
+//                                    myByte = -122;
+//                                } else {
+//                                    myByte++;
+//                                }
+//                                m.put(myByte);
+//                        }
+                            Log.i("NEW", "DOne with sample " + c);
+                            ByteBuffer buffer = inputBuffers[inIndex];
+                            //inputBuffers[inIndex] = m;
+                            //int sampleSize = extractor.readSampleData(buffer, 0);
+                            buffer.clear();
+                            buffer.put(g);
+                        }else{
+                            ByteBuffer buffer = inputBuffers[inIndex];
+                            extractor.readSampleData(buffer, 0);
+                        }
+//                        //m.rewind();
+//                        ByteBuffer buffer = inputBuffers[inIndex];
+//                        //inputBuffers[inIndex] = m;
+//                        //int sampleSize = extractor.readSampleData(buffer, 0);
+//                        buffer.clear();
+//                        buffer.put(g);
+//                        Byte myByte = -126;
                         if (sampleSize < 0) {
                             // We shouldn't stop the playback at this point, just pass the EOS
                             // flag to decoder, we will get it again from the
                             // dequeueOutputBuffer
-                            Log.d("DecodeActivity", "InputBuffer BUFFER_FLAG_END_OF_STREAM");
+//                            buffer.rewind();
+//                            while(buffer.hasRemaining()) {
+//                                if (myByte >= 127) {
+//                                    myByte = 0;
+//                                } else {
+//                                    myByte++;
+//                                }
+//                                buffer.put(myByte);
+//                            }
+                            Log.i("DecodeActivity", "InputBuffer BUFFER_FLAG_END_OF_STREAM");
                             decoder.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
                             isEOS = true;
                         } else {
-
-                            Byte myByte = 0;
-                            while(buffer.hasRemaining()){
-                                if(myByte >= 127){
-                                    myByte = 0;
-                                }else{
-                                    myByte ++;
-                                }
-                                buffer.put(myByte);
-                            }
+//                            buffer.rewind();
+//                            Log.i("DecodeActivity", "Before loop");
+//                            while(buffer.hasRemaining()) {
+////                                if (myByte >= 127) {
+////                                    myByte = 0;
+////                                } else {
+////                                    myByte++;
+////                                }
+//                               // buffer.put(myByte);
+//                            }
+                            Log.i("DecodeActivity", "After loop");
+                           // buffer.rewind();
                             decoder.queueInputBuffer(inIndex, 0, sampleSize, extractor.getSampleTime(), 0);
+                            //c++;
                             extractor.advance();
                         }
                     }
@@ -258,6 +324,15 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
                                 break;
                             }
                         }
+//                        byte myByte = 0;
+//                        while(buffer.hasRemaining()) {
+//                                if (myByte >= 127) {
+//                                    myByte = 0;
+//                                } else {
+//                                    myByte++;
+//                                }
+//                                buffer.put(myByte);
+//                            }
                         decoder.releaseOutputBuffer(outIndex, true);
                         break;
                 }
